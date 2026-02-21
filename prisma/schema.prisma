@@ -1,0 +1,146 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum VideoSource {
+  YOUTUBE
+  EXCLUSIVE
+}
+
+enum VideoStatus {
+  PUBLIC
+  PREMIUM
+  DRAFT
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  PAST_DUE
+}
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  passwordHash     String
+  name             String?
+  role             Role      @default(USER)
+  emailVerified    Boolean   @default(false)
+  emailVerifyToken String?
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  stripeCustomerId String?   @unique
+  cookieConsent    Json?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  lastLoginAt      DateTime?
+  loginAttempts    Int       @default(0)
+  lockedUntil      DateTime?
+
+  subscription Subscription?
+  comments     Comment[]
+  activityLogs ActivityLog[]
+
+  @@index([email])
+  @@index([stripeCustomerId])
+}
+
+model Video {
+  id              String      @id @default(cuid())
+  slug            String      @unique
+  title           String
+  description     String?     @db.Text
+  youtubeId       String?     @unique
+  thumbnailUrl    String?
+  customThumbnail String?
+  exclusiveUrl    String?
+  source          VideoSource @default(YOUTUBE)
+  status          VideoStatus @default(PUBLIC)
+  duration        Int?
+  publishedAt     DateTime?
+  views           Int         @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  tags     Tag[]
+  comments Comment[]
+
+  @@index([status, publishedAt(sort: Desc)])
+  @@index([source])
+  @@index([slug])
+}
+
+model Tag {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  slug   String  @unique
+  videos Video[]
+
+  @@index([slug])
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeSubscriptionId String             @unique
+  stripePriceId        String
+  status               SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelledAt          DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@index([status])
+  @@index([stripeSubscriptionId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  videoId   String
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  approved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([videoId, createdAt(sort: Desc)])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  action    String
+  details   Json?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([userId])
+}
+
+model NewsletterSubscriber {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  confirmed        Boolean  @default(false)
+  confirmToken     String?
+  unsubscribeToken String   @default(cuid())
+  createdAt        DateTime @default(now())
+
+  @@index([email])
+}
