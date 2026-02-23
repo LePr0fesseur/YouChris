@@ -74,20 +74,33 @@ export default auth(async function middleware(request: NextRequest) {
   // ─── Headers de sécurité ─────────────────────────────────────────────────────
   const response = NextResponse.next();
 
+  const isDev = process.env.NODE_ENV === "development";
+
+  // En développement : CSP permissive pour autoriser les scripts inline de Next.js
+  // (Turbopack, hot-reload, hydration React). En production : CSP stricte.
+  const scriptSrc = isDev
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com"
+    : "script-src 'self' https://js.stripe.com";
+
+  // En développement : autoriser les WebSockets de hot-reload (localhost)
+  const connectSrc = isDev
+    ? "connect-src 'self' https://api.stripe.com https://www.googleapis.com ws://localhost:* wss://localhost:*"
+    : "connect-src 'self' https://api.stripe.com https://www.googleapis.com";
+
   const cspHeader = [
     "default-src 'self'",
-    "script-src 'self' https://js.stripe.com",
+    scriptSrc,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: https: blob:",
     "media-src 'self' blob:",
     "frame-src https://www.youtube.com https://www.youtube-nocookie.com https://js.stripe.com",
-    "connect-src 'self' https://api.stripe.com https://www.googleapis.com",
+    connectSrc,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-    "upgrade-insecure-requests",
+    ...(isDev ? [] : ["upgrade-insecure-requests"]),
   ].join("; ");
 
   response.headers.set("Content-Security-Policy", cspHeader);
@@ -98,10 +111,12 @@ export default auth(async function middleware(request: NextRequest) {
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=()"
   );
-  response.headers.set(
-    "Strict-Transport-Security",
-    "max-age=31536000; includeSubDomains"
-  );
+  if (!isDev) {
+    response.headers.set(
+      "Strict-Transport-Security",
+      "max-age=31536000; includeSubDomains"
+    );
+  }
 
   return response;
 });
